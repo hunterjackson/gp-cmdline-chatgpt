@@ -86,7 +86,7 @@ class ChatState:
 
         # TODO: make update only
         with open(self.chat_file, 'a') as f:
-            for msg in self._new_messages: 
+            for msg in self._new_messages:
                 f.write(json.dumps(msg) + '\n')
 
         fcntl.flock(self.lock_file, fcntl.LOCK_UN)
@@ -153,6 +153,8 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--new', action='store_true', help='Starts a new ChatGPT Session')
     parser.add_argument('-r', '--resume_session', type=int, help='Resume an old session by giving that sessions id')
     args = parser.parse_args()
+    if args.resume_session is not None and args.new:
+        raise AssertionError('a new session cannot be started when a resume session id is provided')
+
     config = configuration()
     print(send_chat(' '.join(args.message), config, args.new))
-    # print(send_chat("and how many people are there?", config))
