@@ -71,7 +71,7 @@ class ChatState:
                 for line in f:
                     self._messages.append(json.loads(line))
         else:
-            self._messages.append(ChatState._message('system', config['system_message']))
+            self._new_messages.append(ChatState._message('system', config['system_message']))
 
     @staticmethod
     def _message(role: str, content: str):
@@ -85,8 +85,8 @@ class ChatState:
             json.dump({'active_chat_id': self.id}, f)
 
         # TODO: make update only
-        with open(self.chat_file, 'w') as f:
-            for msg in self.messages():  # appends new to old messages
+        with open(self.chat_file, 'a') as f:
+            for msg in self._new_messages: 
                 f.write(json.dumps(msg) + '\n')
 
         fcntl.flock(self.lock_file, fcntl.LOCK_UN)
