@@ -29,7 +29,7 @@ CONFIG_SCHEMA = {
             'default': 'gpt-3.5-turbo'
         },
         'temperature': {
-            'type': 'integer',
+            'type': 'number',
             'default': 1
         },
         'system_message': {
@@ -43,7 +43,7 @@ ConfigT = Dict[str, Union[str, float]]
 
 
 class ChatState:
-    def __init__(self, config: ConfigT):
+    def __init__(self, config: ConfigT, new: bool = False):
         self.state_dir: Path = Path(path.expanduser(config['chat_history']))
         try:
             makedirs(self.state_dir)  # ensure dir exists
@@ -58,7 +58,7 @@ class ChatState:
         self.lock_file.write(str(getpid()))
 
         self.state_file: Path = self.state_dir / '.state.json'
-        if not self.state_file.exists():
+        if new or not self.state_file.exists():
             self.id: int = int(time.time())
         else:
             with open(self.state_file) as f:
@@ -121,6 +121,8 @@ def configuration() -> ConfigT:
                 config[k] = float(config[k])
             except ValueError:
                 raise AssertionError(f'{k}, must be of type {v["type"]}')
+        else:
+            raise AssertionError(f'{v["type"]} is not a supported type')
 
     return config
 
@@ -129,20 +131,29 @@ def headers(config: ConfigT) -> Dict[str, str]:
     return {'Content-Type': 'application/json', 'Authorization': f'Bearer {config["api_key"]}'}
 
 
-def send_chat(msg: str, config: ConfigT):
-    with ChatState(config) as state:
+def send_chat(msg: str, config: ConfigT, new_chat: bool = False):
+    with ChatState(config, new=new_chat) as state:
         state.add_user_message(msg)
         payload = {'model': config['model'], 'temperature': config['temperature'], 'messages': state.messages()}
         data = json.dumps(payload).encode('utf-8')
-        print(data)
         request = urllib.request.Request(URL, data, headers=headers(config), method='POST')
         response = json.loads(urllib.request.urlopen(request).read())
         response_message = response['choices'][0]['message']
         state.add_message(response_message)
-    print(response)
+    return response_message['content']
 
 
 if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(
+        prog='Commandline ChatGPT',
+        description='Uses the ChatGPT API to allow interacting from the commandline')
+    parser.add_argument('message', nargs='*', type=str)
+    parser.add_argument('-n', '--new', action='store_true', help='Starts a new ChatGPT Session')
+    parser.add_argument('-r', '--resume_session', type=int, help='Resume an old session by giving that sessions id')
+    args = parser.parse_args()
+    print(args)
     config = configuration()
-    # send_chat("What is the largest us state?", config)
-    send_chat("and how many people are there?", config)
+    print(send_chat(' '.join(args.message), config, args.new))
+    # print(send_chat("and how many people are there?", config))
