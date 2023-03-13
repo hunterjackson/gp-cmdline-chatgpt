@@ -153,7 +153,6 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--new', action='store_true', help='Starts a new ChatGPT Session')
     parser.add_argument('-r', '--resume_session', type=int, help='Resume an old session by giving that sessions id')
     args = parser.parse_args()
-    print(args)
     config = configuration()
     print(send_chat(' '.join(args.message), config, args.new))
     # print(send_chat("and how many people are there?", config))
