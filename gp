@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from os import makedirs, path, getpid, remove
 from pathlib import Path
-from typing import Dict, Union, Final, List
+from typing import Dict, Union, Final, List, Optional
 
 # Program Constants
 CONFIG_LOCATION: Final[Path] = Path.home() / '.config/gp-cmdline-chatgpt.json'
@@ -43,7 +43,8 @@ ConfigT = Dict[str, Union[str, float]]
 
 
 class ChatState:
-    def __init__(self, config: ConfigT, new: bool = False):
+    def __init__(self, config: ConfigT, new: bool = False, _id: Optional[int] = None):
+        assert not (new and (_id is not None)), 'new cannot be given if id is given'
         self.state_dir: Path = Path(path.expanduser(config['chat_history']))
         try:
             makedirs(self.state_dir)  # ensure dir exists
@@ -58,12 +59,14 @@ class ChatState:
         self.lock_file.write(str(getpid()))
 
         self.state_file: Path = self.state_dir / '.state.json'
-        if new or not self.state_file.exists():
+        if _id is not None:
+            self.id = _id
+            assert self.chat_file.exists()
+        elif new or not self.state_file.exists():
             self.id: int = int(time.time())
         else:
             with open(self.state_file) as f:
                 self.id = json.load(f)['active_chat_id']
-        self.chat_file: Path = self.state_dir / f'{self.id}.jsonlines'
         self._new_messages: List[Dict[str, str]] = []
         self._messages = []
         if self.chat_file.exists():
@@ -72,6 +75,10 @@ class ChatState:
                     self._messages.append(json.loads(line))
         else:
             self._new_messages.append(ChatState._message('system', config['system_message']))
+
+    @property
+    def chat_file(self):
+        return self.state_dir / f'{self.id}.jsonlines'
 
     @staticmethod
     def _message(role: str, content: str):
@@ -84,7 +91,6 @@ class ChatState:
         with open(self.state_file, 'w') as f:
             json.dump({'active_chat_id': self.id}, f)
 
-        # TODO: make update only
         with open(self.chat_file, 'a') as f:
             for msg in self._new_messages:
                 f.write(json.dumps(msg) + '\n')
@@ -139,6 +145,9 @@ def send_chat(msg: str, config: ConfigT, new_chat: bool = False):
         request = urllib.request.Request(URL, data, headers=headers(config), method='POST')
         response = json.loads(urllib.request.urlopen(request).read())
         response_message = response['choices'][0]['message']
+
+        # don't add messages until response received 
+        state.add_user_message(msg)
         state.add_message(response_message)
     return response_message['content']
 
